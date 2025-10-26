@@ -53,51 +53,51 @@ export function useAuth() {
     });
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔐 useAuth: Auth state change event:', event, { 
-        hasSession: !!session, 
-        hasUser: !!session?.user 
-      });
-      
-      setState(prev => ({
-        ...prev,
-        session,
-        user: session?.user || null,
-        loading: false
-      }));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔐 useAuth: Auth state change event:', event, { 
+          hasSession: !!session, 
+          hasUser: !!session?.user 
+        });
+        
+        setState(prev => ({
+          ...prev,
+          session,
+          user: session?.user || null,
+          loading: false
+        }));
 
-      if (session?.user) {
-        console.log('🔐 useAuth: Loading profile after auth change for user:', session.user.id);
-        await loadUserProfile(session.user.id);
-      } else {
-        console.log('🔐 useAuth: No session, clearing profile');
-        setState(prev => ({ ...prev, profile: null }));
+        if (session?.user) {
+          console.log('🔐 useAuth: Loading profile after auth change for user:', session.user.id);
+          await loadUserProfile(session.user.id);
+        } else {
+          console.log('🔐 useAuth: No session, clearing profile');
+          setState(prev => ({ ...prev, profile: null }));
+        }
       }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Auto-create profile for new Google OAuth users
+  // Auto-create profile for new users (only once)
   useEffect(() => {
     if (state.user && !state.profile && !state.loading) {
       console.log('🔐 useAuth: Auto-creating profile for new user:', state.user.id);
       createInitialProfile(state.user);
     }
-  }, [state.user, state.profile, state.loading]);
+  }, [state.user?.id, state.profile, state.loading]); // ✅ More specific dependency
 
   const createInitialProfile = async (user: User) => {
     try {
       console.log('🔐 useAuth: Creating initial profile for user:', user.id);
       
-      // Check if profile already exists
+      // Check if profile already exists (prevents 409 conflict)
       const { data: existingProfile } = await supabase
         .from('user_profiles')
         .select('*') 
         .eq('user_id', user.id)
-        .maybeSingle();
+        .maybeSingle(); // ✅ Returns single object or null, not array
 
       if (existingProfile) {
         console.log('🔐 useAuth: Found existing profile, setting state');
@@ -106,6 +106,7 @@ export function useAuth() {
       }
 
       console.log('🔐 useAuth: No existing profile found, creating new one');
+      
       // Create initial profile from Google OAuth data
       const initialProfile = {
         user_id: user.id,
@@ -126,10 +127,13 @@ export function useAuth() {
 
       if (error) {
         console.error('🔐 useAuth: Error creating initial profile:', error);
-      } else {
-        console.log('🔐 useAuth: Successfully created new profile');
-        setState(prev => ({ ...prev, profile: newProfile }));
+        return;
       }
+
+      console.log('🔐 useAuth: Successfully created new profile');
+      // ✅ Update state immediately after creation
+      setState(prev => ({ ...prev, profile: newProfile }));
+      
     } catch (error) {
       console.error('🔐 useAuth: Error in createInitialProfile:', error);
     }
@@ -139,18 +143,26 @@ export function useAuth() {
     try {
       console.log('🔐 useAuth: Loading user profile for ID:', userId);
       
-      const { data, error } = await supabase
+      // ✅ Use maybeSingle() for consistency - returns object or null, not array
+      const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
-        .limit(1);
+        .maybeSingle();
 
-      if (data && data.length > 0) {
-        console.log('🔐 useAuth: Profile loaded successfully');
-        setState(prev => ({ ...prev, profile: data[0] }));
-      } else if (error && error.code !== 'PGRST116') {
+      if (error && error.code !== 'PGRST116') {
         console.error('🔐 useAuth: Error loading profile:', error);
+        return;
       }
+
+      if (profile) {
+        console.log('🔐 useAuth: Profile loaded successfully');
+        setState(prev => ({ ...prev, profile }));
+      } else {
+        console.log('🔐 useAuth: No profile found for user, auto-create will trigger');
+        // Profile doesn't exist, createInitialProfile useEffect will handle it
+      }
+      
     } catch (error) {
       console.error('🔐 useAuth: Error loading user profile:', error);
     }
