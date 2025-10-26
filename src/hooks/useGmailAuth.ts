@@ -116,42 +116,35 @@ export function useGmailAuth() {
     }
   };
 
-  const connectGmail = async () => {
-    try {
-      console.log('📧 useGmailAuth: Initiating Gmail connection');
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      // ✅ CORRECT: Use standard Supabase OAuth
-      // Scopes MUST be configured in Supabase Dashboard!
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-            include_granted_scopes: 'true'
-          }
-        },
-      });
+const connectGmail = async () => {
+  try {
+    console.log('📧 useGmailAuth: Initiating Gmail connection');
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    // Use Supabase's Google OAuth with Gmail scopes
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send email profile',
+        redirectTo: window.location.origin,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
+      },
+    });
 
-      if (error) {
-        console.error('📧 useGmailAuth: OAuth error:', error);
-        throw error;
-      }
-      
-      console.log('📧 useGmailAuth: OAuth initiated successfully');
-    } catch (error) {
-      console.error('📧 useGmailAuth: Error connecting Gmail:', error);
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error 
-          ? error.message 
-          : 'Failed to connect Gmail account',
-      }));
-    }
-  };
+    if (error) throw error;
+    console.log('📧 useGmailAuth: OAuth initiated successfully');
+  } catch (error) {
+    console.error('📧 useGmailAuth: Error connecting Gmail:', error);
+    setState(prev => ({
+      ...prev,
+      isLoading: false,
+      error: 'Failed to connect Gmail account',
+    }));
+  }
+};
 
   const disconnectGmail = async () => {
     try {
