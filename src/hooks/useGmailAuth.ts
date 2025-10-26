@@ -24,23 +24,28 @@ export function useGmailAuth() {
     checkGmailConnection();
     
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('📧 useGmailAuth: Auth state change', { event, hasProviderToken: !!session?.provider_token });
-      
-      if (event === 'SIGNED_IN' && session?.provider_token) {
-        console.log('📧 useGmailAuth: User signed in with provider token, verifying Gmail connection');
-        await verifyGmailConnection(session.provider_token, session.user?.email);
-      } else if (event === 'SIGNED_OUT') {
-        console.log('📧 useGmailAuth: User signed out, clearing Gmail state');
-        setState({
-          isGmailConnected: false,
-          isLoading: false,
-          error: null,
-          accessToken: null,
-          userEmail: null,
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('📧 useGmailAuth: Auth state change', { 
+          event, 
+          hasProviderToken: !!session?.provider_token 
         });
+        
+        if (event === 'SIGNED_IN' && session?.provider_token) {
+          console.log('📧 useGmailAuth: User signed in with provider token, verifying Gmail connection');
+          await verifyGmailConnection(session.provider_token, session.user?.email);
+        } else if (event === 'SIGNED_OUT') {
+          console.log('📧 useGmailAuth: User signed out, clearing Gmail state');
+          setState({
+            isGmailConnected: false,
+            isLoading: false,
+            error: null,
+            accessToken: null,
+            userEmail: null,
+          });
+        }
       }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);
@@ -93,7 +98,9 @@ export function useGmailAuth() {
       setState({
         isGmailConnected: isConnected,
         isLoading: false,
-        error: isConnected ? null : 'Gmail API connection failed',
+        error: isConnected 
+          ? null 
+          : 'Gmail API connection failed - ensure scopes are configured in Supabase',
         accessToken: isConnected ? accessToken : null,
         userEmail: isConnected ? email : null,
       });
@@ -102,7 +109,7 @@ export function useGmailAuth() {
       setState({
         isGmailConnected: false,
         isLoading: false,
-        error: 'Failed to verify Gmail connection',
+        error: 'Failed to verify Gmail connection - check scopes configuration',
         accessToken: null,
         userEmail: null,
       });
@@ -114,28 +121,34 @@ export function useGmailAuth() {
       console.log('📧 useGmailAuth: Initiating Gmail connection');
       setState(prev => ({ ...prev, isLoading: true, error: null }));
       
-      // Use Supabase's Google OAuth with Gmail scope
+      // ✅ CORRECT: Use standard Supabase OAuth
+      // Scopes MUST be configured in Supabase Dashboard!
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send email profile',
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            client_id: '97032845059-016f0bcun31cmdcbklarfci9mu3n0hmk.apps.googleusercontent.com'
+            include_granted_scopes: 'true'
           }
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('📧 useGmailAuth: OAuth error:', error);
+        throw error;
+      }
+      
       console.log('📧 useGmailAuth: OAuth initiated successfully');
     } catch (error) {
       console.error('📧 useGmailAuth: Error connecting Gmail:', error);
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: 'Failed to connect Gmail account',
+        error: error instanceof Error 
+          ? error.message 
+          : 'Failed to connect Gmail account',
       }));
     }
   };
