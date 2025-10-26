@@ -131,12 +131,19 @@ export default function Dashboard({ onGlobalError }: DashboardProps) {
 
       // Load all quotations for comprehensive analysis
       console.log('📊 Dashboard: Fetching all quotations for MEP analysis');
-      const { data: allQuotations } = await supabase
-        .from('quotations')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+     const { data: quotations, error: quotationsError } = await supabase
+  .from('quotations')
+  .select(`
+    *,
+    email_id(id, user_id, subject, from_email),
+    company_id(id, name, email)
+  `)
+  .eq('email_id.user_id', userId)
+  .order('created_at', { ascending: false });
 
+if (quotationsError) {
+  console.error('Dashboard: Error fetching quotations:', quotationsError);
+}
       // Today's RFQs
       const { count: todayRFQs } = await supabase
         .from('emails')
